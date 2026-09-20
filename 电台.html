@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberRadio - 高级网络电台</title>
+    <!-- HLS.js 支持 m3u8 播放 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <!-- FontAwesome 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-primary: #0a0d14;
+            --bg-card: rgba(22, 27, 38, 0.75);
+            --bg-card-hover: rgba(32, 40, 58, 0.85);
+            --accent-color: #00f2fe;
+            --accent-gradient: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+            --text-main: #f0f4f8;
+            --text-sub: #8a99ad;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --danger-color: #ff4757;
+            --success-color: #2ed573;
+            --warning-color: #ffa502;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 198, 255, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(0, 114, 255, 0.08) 0%, transparent 40%);
+        }
+
+        /* 顶部导航与监控 */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 30px;
+            background: rgba(10, 13, 20, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        /* 流量监控面板 */
+        .traffic-monitor {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            font-size: 0.82rem;
+            color: var(--text-sub);
+        }
+
+        .traffic-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .traffic-value {
+            color: var(--accent-color);
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        /* 语言切换器 */
+        .lang-select {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 8px;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .lang-select:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* 主界面容器 */
+        .container {
+            max-width: 1280px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 25px;
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 25px;
+            flex: 1;
+        }
+
+        @media (max-width: 992px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 播放器面板 */
+        .player-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .station-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .station-details h2 {
+            font-size: 1.6rem;
+            margin-bottom: 6px;
+        }
+
+        .station-url {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+            word-break: break-all;
+            max-width: 450px;
+        }
+
+        /* 连接状态指示器 */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-sub);
+        }
+
+        .status-badge.connecting .status-dot {
+            background: var(--warning-color);
+            box-shadow: 0 0 10px var(--warning-color);
+            animation: pulse 1s infinite alternate;
+        }
+
+        .status-badge.playing .status-dot {
+            background: var(--success-color);
+            box-shadow: 0 0 10px var(--success-color);
+        }
+
+        .status-badge.error .status-dot {
+            background: var(--danger-color);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.3; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* 视效 Canvas 画布 */
+        .visualizer-wrapper {
+            position: relative;
+            width: 100%;
+            height: 220px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        canvas#visualizer {
+            width: 100%;
+            height: 100%;
+        }
+
+        .visualizer-selector {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(10, 13, 20, 0.7);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            outline: none;
+            backdrop-filter: blur(5px);
+        }
+
+        /* 控制组件区 */
+        .controls-row {
+            display: grid;
+            grid-template-columns: auto 1fr 1fr;
+            gap: 20px;
+            align-items: center;
+            background: rgba(0,0,0,0.2);
+            padding: 15px 20px;
+            border-radius: 14px;
+        }
+
+        .play-btn {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            background: var(--accent-gradient);
+            color: #fff;
+            font-size: 1.4rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 198, 255, 0.4);
+        }
+
+        .play-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 198, 255, 0.6);
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-sub);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.1);
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent-color);
+        }
+
+        /* 10个喜爱预设按键区 */
+        .presets-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .section-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-sub);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .presets-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+
+        @media (max-width: 576px) {
+            .presets-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .preset-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 8px;
+            color: var(--text-main);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .preset-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--accent-color);
+        }
+
+        .preset-btn .num {
+            font-size: 0.75rem;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .preset-btn .name {
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            text-align: center;
+        }
+
+        /* 右侧侧边栏：电台列表与历史记录 */
+        .sidebar-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            backdrop-filter: blur(10px);
+            max-height: 720px;
+        }
+
+        .tab-headers {
+            display: flex;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-sub);
+            font-size: 0.95rem;
+            font-weight: 600;
+            padding: 6px 12px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 8px 12px 8px 36px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-main);
+            outline: none;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-sub);
+        }
+
+        .list-container {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 4px;
+        }
+
+        .list-container::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .list-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .station-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .station-item:hover {
+            background: var(--bg-card-hover);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .station-item.active {
+            border-color: var(--accent-color);
+            background: rgba(0, 198, 255, 0.08);
+        }
+
+        .station-item .item-title {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .station-item-actions {
+            display: flex;
+            gap: 6px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .station-item:hover .station-item-actions {
+            opacity: 1;
+        }
+
+        .action-icon-btn {
+            background: none;
+            border: none;
+            color: var(--text-sub);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        .action-icon-btn:hover {
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+        }
+
+        /* 模态弹窗 Modal */
+        .modal-overlay {
+            position: fixed;
+            top:0; left:0; right:0; bottom:0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal {
+            background: #161b26;
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 480px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .modal h3 {
+            font-size: 1.2rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+        }
+
+        .form-group input {
+            padding: 10px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: #fff;
+            outline: none;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: #fff;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .tool-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .history-time {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部状态与监控 -->
+    <header>
+        <div class="brand">
+            <i class="fa-solid fa-radio"></i>
+            <span id="app-title">CyberRadio 网络电台</span>
+        </div>
+
+        <div class="header-controls">
+            <!-- 流量与网速监控 -->
+            <div class="traffic-monitor">
+                <div class="traffic-item">
+                    <i class="fa-solid fa-gauge-high"></i>
+                    <span id="label-speed">网速:</span>
+                    <span class="traffic-value" id="network-speed">0 KB/s</span>
+                </div>
+                <div class="traffic-item">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    <span id="label-total">流量:</span>
+                    <span class="traffic-value" id="network-total">0.0 MB</span>
+                </div>
+            </div>
+
+            <!-- 多语言切换器 -->
+            <select class="lang-select" id="lang-select" onchange="changeLanguage(this.value)">
+                <option value="zh-CN">简体中文</option>
+                <option value="zh-TW">繁體中文</option>
+                <option value="en">English</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- 主界面内容区 -->
+    <div class="container">
+        
+        <!-- 左侧：播放器核心控制 -->
+        <div class="player-card">
+            
+            <!-- 电台信息与连接状态 -->
+            <div class="station-info">
+                <div class="station-details">
+                    <h2 id="current-station-name">未选择电台</h2>
+                    <div class="station-url" id="current-station-url">点击右侧列表选择电台播放</div>
+                </div>
+                <div class="status-badge" id="status-badge">
+                    <span class="status-dot"></span>
+                    <span id="status-text">未就绪</span>
+                </div>
+            </div>
+
+            <!-- 可选音律画面 (Visualizer Canvas) -->
+            <div class="visualizer-wrapper">
+                <canvas id="visualizer"></canvas>
+                <select class="visualizer-selector" id="visualizer-type" onchange="setVisualizerType(this.value)">
+                    <option value="bars">频域柱状图 (Bars)</option>
+                    <option value="wave">时域波形图 (Waveform)</option>
+                    <option value="circle">环形律动 (Radial)</option>
+                    <option value="particles">霓虹粒子 (Particles)</option>
+                    <option value="off">关闭动画 (Off)</option>
+                </select>
+            </div>
+
+            <!-- 控制面板：播放/停止、音量与增益 -->
+            <div class="controls-row">
+                <button class="play-btn" id="play-btn" onclick="togglePlay()">
+                    <i class="fa-solid fa-play" id="play-icon"></i>
+                </button>
+
+                <!-- 主音量 -->
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <span id="label-volume"><i class="fa-solid fa-volume-high"></i> 音量</span>
+                        <span id="volume-val">80%</span>
+                    </div>
+                    <input type="range" id="volume-slider" min="0" max="100" value="80" oninput="updateVolume(this.value)">
+                </div>
+
+                <!-- 声音增益 (Gain) Booster -->
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <span id="label-gain"><i class="fa-solid fa-bolt"></i> 音频增益</span>
+                        <span id="gain-val">1.0x</span>
+                    </div>
+                    <input type="range" id="gain-slider" min="100" max="300" value="100" oninput="updateGain(this.value)">
+                </div>
+            </div>
+
+            <!-- 10个可自设的喜爱电台按键 -->
+            <div class="presets-section">
+                <div class="section-title">
+                    <span><i class="fa-solid fa-star"></i> <span id="label-presets">预设喜爱电台 (10个)</span></span>
+                    <span style="font-size:0.75rem; color:var(--text-sub);" id="preset-tip">点击播放，右键/长按保存当前</span>
+                </div>
+                <div class="presets-grid" id="presets-grid">
+                    <!-- JS动态渲染 1~10 按钮 -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 右侧侧边栏：电台列表与播放历史 -->
+        <div class="sidebar-card">
+            
+            <div class="tab-headers">
+                <button class="tab-btn active" id="tab-btn-stations" onclick="switchTab('stations')">
+                    <i class="fa-solid fa-list"></i> <span id="tab-title-stations">电台列表</span>
+                </button>
+                <button class="tab-btn" id="tab-btn-history" onclick="switchTab('history')">
+                    <i class="fa-solid fa-clock-rotate-left"></i> <span id="tab-title-history">播放历史</span>
+                </button>
+            </div>
+
+            <!-- 电台列表面板 -->
+            <div id="panel-stations" style="display: flex; flex-direction: column; gap: 12px; height: 100%;">
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="search-input" placeholder="搜索电台名称或网址..." oninput="filterStations(this.value)">
+                </div>
+
+                <div class="tool-btns">
+                    <button class="btn btn-primary" style="flex:1" onclick="openAddModal()">
+                        <i class="fa-solid fa-plus"></i> <span id="btn-add-station">添加电台</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetDefaultStations()" title="重置为默认列表">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+
+                <div class="list-container" id="station-list">
+                    <!-- 电台列表项 JS 渲染 -->
+                </div>
+            </div>
+
+            <!-- 播放历史面板 -->
+            <div id="panel-history" style="display: none; flex-direction: column; gap: 12px; height: 100%;">
+                <div class="tool-btns">
+                    <button class="btn btn-secondary" style="width:100%" onclick="clearHistory()">
+                        <i class="fa-solid fa-trash-can"></i> <span id="btn-clear-history">清空历史记录</span>
+                    </button>
+                </div>
+
+                <div class="list-container" id="history-list">
+                    <!-- 历史项 JS 渲染 -->
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- 添加/编辑电台弹窗 Modal -->
+    <div class="modal-overlay" id="station-modal">
+        <div class="modal">
+            <h3 id="modal-title">添加新电台</h3>
+            <input type="hidden" id="modal-edit-id">
+            <div class="form-group">
+                <label id="label-station-name">电台名称</label>
+                <input type="text" id="modal-input-name" placeholder="例如：CNR中国之声">
+            </div>
+            <div class="form-group">
+                <label id="label-station-url">直播流网址 (.m3u8 / http)</label>
+                <input type="text" id="modal-input-url" placeholder="http://...">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()" id="btn-cancel">取消</button>
+                <button class="btn btn-primary" onclick="saveStationForm()" id="btn-save">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 隐藏的 HTML5 Audio 元素 -->
+    <audio id="audio-player" crossorigin="anonymous"></audio>
+
+    <script>
+        // --- 预置电台完整列表 ---
+        const rawPresetStations = [
+            ["CGTN Radio", "http://sk.cri.cn/am846.m3u8"],
+            ["CRI环球资讯广播", "http://satellitepull.cnr.cn/live/wxhqzx01/playlist.m3u8"],
+            ["CRI华语环球广播", "http://sk.cri.cn/hyhq.m3u8"],
+            ["CRI南海之声", "http://sk.cri.cn/nhzs.m3u8"],
+            ["CRI世界华声", "http://sk.cri.cn/hxfh.m3u8"],
+            ["CRI轻松调频", "http://sk.cri.cn/915.m3u8"],
+            ["CNR中国之声", "https://live-play.cctvnews.cctv.com/cctv/zgzs192.m3u8"],
+            ["CNR经济之声", "http://ngcdn002.cnr.cn/live/jjzs/index.m3u8"],
+            ["CNR文艺之声", "http://audiows010.cnr.cn/live/wyzs192/playlist.m3u8"],
+            ["CNR阅读之声", "http://ngcdn014.cnr.cn/live/ylgb/index.m3u8"],
+            ["CNR台海之声", "http://ngcdn005.cnr.cn/live/zhzs/index.m3u8"],
+            ["CNR乡村之声", "http://ngcdn017.cnr.cn/live/xczs/index.m3u8"],
+            ["CNR老年之声", "http://ngcdn011.cnr.cn/live/lnzs/index.m3u8"],
+            ["CNR民族之声", "http://ngcdn009.cnr.cn/live/mzzs/index.m3u8"],
+            ["CNR深圳旁边之声", "http://ngcdn008.cnr.cn/live/xgzs/index.m3u8"],
+            ["CNR大湾区之声", "http://ngcdn007.cnr.cn/live/hxzs/index.m3u8"],
+            ["CNR神州之声", "http://ngcdn006.cnr.cn/live/szzs/index.m3u8"],
+            ["CNR中国交通广播", "http://ngcdn016.cnr.cn/live/gsgljtgb/index.m3u8"],
+            ["CNR维吾尔语广播", "http://ngcdn013.cnr.cn/live/wygb/index.m3u8"],
+            ["CNR藏语广播", "http://ngcdn012.cnr.cn/live/zygb/index.m3u8"],
+            ["CNR哈萨克语广播", "http://ngcdn025.cnr.cn/live/hygb/index.m3u8"],
+            ["长三角之声", "http://satellitepull.cnr.cn/live/wx32dfgbdt/playlist.m3u8"],
+            ["第一财经广播", "http://satellitepull.cnr.cn/live/wx32dycjgb/playlist.m3u8"],
+            ["AsiaFM 亚洲音乐", "http://asiafm.hk:8000/asiafm"],
+            ["AsiaFM 亚洲经典", "http://goldfm.cn:8000/goldfm"],
+            ["AsiaFM 亚洲天空", "http://funradio.cn:8000/funradio"],
+            ["AsiaFM HD音乐", "http://asiafm.hk:8000/asiahd"],
+            ["Big B Radio - 中文流行", "http://cpop.bigbradio.net/s"],
+            ["Big B Radio - 韩语流行", "http://kpop.bigbradio.net/s"],
+            ["Big B Radio - 日语流行", "http://jpop.bigbradio.net/s"],
+            ["Big B Radio - 亚洲流行", "http://apop.bigbradio.net/s"],
+            ["Modern Radio", "http://play.redefine.ltd/Stream1/FM1058-1.m3u8"],
+            ["电音电台", "http://play.redefine.ltd/Stream3/FM1058-3.m3u8"],
+            ["古典音乐台", "http://play.redefine.ltd/Stream2/FM1058-2.m3u8"],
+            ["沐耳电台", "http://mplay.muearfm.cn/muearfm/fm666.m3u8"],
+            ["动感音悦台", "http://stream3.hndt.com/now/ufjjbZxV/playlist.m3u8"],
+            ["潮流音悦台", "http://play-radio-stream3.hndt.com/now/Or5au0KN/playlist.m3u8"],
+            ["警广之声", "http://play-radio-stream3.hndt.com/now/prIgXGFo/playlist.m3u8"],
+            ["天籁之音-经典正流行", "http://play-radio-stream3.hndt.com/now/WUBA5hW2/playlist.m3u8"],
+            ["天籁之音 Hi-Fi Radio", "http://play-radio-stream3.hndt.com/now/JxkyN5mR/playlist.m3u8"],
+            ["天籁之音-国风", "http://play-radio-stream3.hndt.com/now/UzPxbRaT/playlist.m3u8"],
+            ["民谣 蓝调", "http://play-radio-stream3.hndt.com/now/XWfN89gh/playlist.m3u8"],
+            ["舞迷心窍", "http://play-radio-stream3.hndt.com/now/WBhgSD3A/playlist.m3u8"],
+            ["心灵音乐馆", "http://play-radio-stream3.hndt.com/now/AFqvb0VX/playlist.m3u8"],
+            ["80后音悦台", "http://stream3.hndt.com/now/SFZeH2cb/playlist.m3u8"],
+            ["经典FM", "http://stream3.hndt.com/now/C5NvUpwy/playlist.m3u8"],
+            ["格莱美音乐台", "http://stream3.hndt.com/now/yorSd1X2/playlist.m3u8"],
+            ["卷卷猫电台", "http://stream3.hndt.com/now/PHucVOu2/playlist.m3u8"],
+            ["有声文摘", "http://stream3.hndt.com/now/WNoVfBcQ/playlist.m3u8"],
+            ["安全百科", "http://stream3.hndt.com/now/4pcovD2L/playlist.m3u8"],
+            ["民谣音乐", "http://stream3.hndt.com/now/DTK5qc83/playlist.m3u8"],
+            ["天籁古典", "http://stream3.hndt.com/now/MdOpB4zP/playlist.m3u8"],
+            ["摇滚天空", "http://stream3.hndt.com/now/SXJtR4M4/playlist.m3u8"],
+            ["国乐悠扬", "http://stream3.hndt.com/now/8bplFuwp/playlist.m3u8"],
+            ["天津静海区综合广播·交通广播网", "http://starfish.bj.aliyun.001.qingting.fm:8000/jingdianFM1008"],
+            ["湖南潇湘之声", "http://satellitepull.cnr.cn/live/wx32hunyygb/playlist.m3u8"],
+            ["湖南经济广播", "http://satellitepull.cnr.cn/live/wx32hunjjgb/playlist.m3u8"],
+            ["湖南旅游广播·PoPoPod播客电台", "http://satellitepull.cnr.cn/live/wx32hunlygb/playlist.m3u8"],
+            ["湖南交通广播", "http://satellitepull.cnr.cn/live/wx32hunjtgb/playlist.m3u8"],
+            ["湖南金鹰之声", "http://satellitepull.cnr.cn/live/wx32955/playlist.m3u8"],
+            ["湖南综合广播", "http://satellitepull.cnr.cn/live/wx32hunxwgb/playlist.m3u8"],
+            ["京津冀之声", "http://audiolive.rbc.cn:1935/live/fm945/96K/tzwj_video.m3u8"],
+            ["北京新闻广播", "http://satellitepull.cnr.cn/live/wxbjxwgb/playlist.m3u8"],
+            ["北京交通广播", "http://audiolive.rbc.cn:1935/live/fm1039/96K/tzwj_video.m3u8"],
+            ["北京青年广播", "http://audiolive.rbc.cn:1935/live/am927/96K/tzwj_video.m3u8"],
+            ["北京外语广播", "http://audiolive.rbc.cn:1935/live/am774/96K/tzwj_video.m3u8"],
+            ["北京城市广播·副中心之声", "http://audiolive.rbc.cn:1935/live/fm1073/96K/tzwj_video.m3u8"],
+            ["北京文艺广播", "http://123.56.16.201:1935/live/fm876/96K/tzwj_video.m3u8"],
+            ["北京故事广播", "http://123.56.16.201:1935/live/am603/96K/tzwj_video.m3u8"],
+            ["北京体育广播", "http://audiolive.rbc.cn:1935/live/fm1025/96K/tzwj_video.m3u8"],
+            ["江苏故事广播", "http://satellitepull.cnr.cn/live/wx32jsgsgb/playlist.m3u8"],
+            ["江苏新闻综合广播", "http://satellitepull.cnr.cn/live/wx32jsxwzhgb/playlist.m3u8"],
+            ["江苏新闻广播", "http://satellitepull.cnr.cn/live/wx32jsxwgb/playlist.m3u8"],
+            ["江苏文艺广播", "http://satellitepull.cnr.cn/live/wx32jswygb/playlist.m3u8"],
+            ["江苏金陵之声", "http://satellitepull.cnr.cn/live/wx32jsqctp/playlist.m3u8"],
+            ["江苏交通广播", "http://satellitepull.cnr.cn/live/wx32jsjtgb/playlist.m3u8"],
+            ["江苏财经广播", "http://satellitepull.cnr.cn/live/wx32jscjgb/playlist.m3u8"],
+            ["江苏健康广播", "http://satellitepull.cnr.cn/live/wx32jsjkgb/playlist.m3u8"],
+            ["安徽之声", "http://satellitepull.cnr.cn/live/wxahxxgb/playlist.m3u8"],
+            ["安徽生活广播·城市之声", "http://satellitepull.cnr.cn/live/wxahshgb/playlist.m3u8"],
+            ["安徽经济广播", "http://satellitepull.cnr.cn/live/wxahjjgb/playlist.m3u8"],
+            ["安徽交通广播", "http://satellitepull.cnr.cn/live/wxahjtgb/playlist.m3u8"],
+            ["安徽旅游广播·高速之声", "http://satellitepull.cnr.cn/live/wxahlygb/playlist.m3u8"],
+            ["安徽戏曲广播·动听995", "http://satellitepull.cnr.cn/live/wxahxqgb/playlist.m3u8"],
+            ["安徽故事广播", "http://satellitepull.cnr.cn/live/wxahxspsgb/playlist.m3u8"],
+            ["湖北之声", "http://satellitepull.cnr.cn/live/wx32hubzsgb/playlist.m3u8"],
+            ["楚天交通广播", "http://satellitepull.cnr.cn/live/wx32hubctjtgb/playlist.m3u8"],
+            ["湖北亲子广播", "http://satellitepull.cnr.cn/live/wx32hubfnetgb/playlist.m3u8"],
+            ["湖北生活广播", "http://satellitepull.cnr.cn/live/wx32hubczshgb/playlist.m3u8"],
+            ["湖北城市之声", "http://satellitepull.cnr.cn/live/wx32hubjtgb/playlist.m3u8"],
+            ["湖北资讯广播", "http://satellitepull.cnr.cn/live/wx32hubzxgb/playlist.m3u8"],
+            ["湖北农村广播", "http://satellitepull.cnr.cn/live/wx32hubncgb/playlist.m3u8"],
+            ["武汉新闻广播", "http://stream.appwuhan.com/xwpdzb/sd/live.m3u8"],
+            ["武汉交通广播", "http://stream.appwuhan.com/jtpdzb/sd/live.m3u8"],
+            ["武汉经济广播", "http://stream.appwuhan.com/cjpdzb/sd/live.m3u8"],
+            ["河北文艺广播", "http://satellitepull.cnr.cn/live/wxhebwygb/playlist.m3u8"],
+            ["河北综合广播", "http://satellitepull.cnr.cn/live/wxhebzhgb/playlist.m3u8"],
+            ["河北交通广播", "http://satellitepull.cnr.cn/live/wxhebjtgb/playlist.m3u8"],
+            ["河北经济广播", "http://satellitepull.cnr.cn/live/wxhebjjgb/playlist.m3u8"],
+            ["河北生活广播", "http://satellitepull.cnr.cn/live/wxhebshgb/playlist.m3u8"],
+            ["福建新闻广播", "http://satellitepull.cnr.cn/live/wx32fjxwgb/playlist.m3u8"],
+            ["福建都市广播·私家车987", "http://satellitepull.cnr.cn/live/wx32fjdndsgb/playlist.m3u8"],
+            ["福建交通广播", "http://satellitepull.cnr.cn/live/wx32fjdnjtgb/playlist.m3u8"],
+            ["福建经济广播", "http://satellitepull.cnr.cn/live/wx32fjdnjjgb/playlist.m3u8"],
+            ["福建东南广播", "http://satellitepull.cnr.cn/live/wx32fjdngb/playlist.m3u8"],
+            ["江西综合新闻广播", "http://satellitepull.cnr.cn/live/wx32jiangxxwgb/playlist.m3u8"],
+            ["江西都市广播", "http://satellitepull.cnr.cn/live/wx32jiangxdsgb/playlist.m3u8"],
+            ["江西信息交通广播", "http://satellitepull.cnr.cn/live/wx32jiangxjtgb/playlist.m3u8"],
+            ["江西民生广播", "http://satellitepull.cnr.cn/live/wx32jiangxmsgb/playlist.m3u8"],
+            ["江西农村广播·绿色985", "http://satellitepull.cnr.cn/live/wx32jiangxncgb/playlist.m3u8"],
+            ["山东综合广播", "http://live-hls.ihzlh.linker.cc/ihzlh/sd_ts01_95.m3u8"],
+            ["山东文艺广播", "http://live-hls.ihzlh.linker.cc/ihzlh/sd_ts03_975.m3u8"],
+            ["山东交通广播", "http://satellitepull.cnr.cn/live/wxsdjtgb/playlist.m3u8"],
+            ["山东体育休闲广播", "http://satellitepull.cnr.cn/live/wxsdtyxxgb/playlist.m3u8"],
+            ["山东经济广播", "http://satellitepull.cnr.cn/live/wxsdjjgb/playlist.m3u8"],
+            ["山东乡村广播", "http://satellitepull.cnr.cn/live/wxsdxcgb/playlist.m3u8"],
+            ["浙江之声", "http://satellitepull.cnr.cn/live/wxzjzs/playlist.m3u8"],
+            ["浙江经济广播", "http://satellitepull.cnr.cn/live/wxzjjjgb/playlist.m3u8"],
+            ["浙江交通之声", "http://satellitepull.cnr.cn/live/wxzjjtgb/playlist.m3u8"],
+            ["广东新闻广播", "http://satellitepull.cnr.cn/live/wxgdxwgb/playlist.m3u8"],
+            ["羊城交通广播", "http://satellitepull.cnr.cn/live/wxgdycjtt/playlist.m3u8"],
+            ["深圳交通广播", "http://satellitepull.cnr.cn/live/wxszjjpl/playlist.m3u8"],
+            ["四川综合广播四川之声", "http://satellitepull.cnr.cn/live/wxsczhgb/playlist.m3u8"],
+            ["CNR音乐之声", "http://liveop.cctv.cn/hls/yyzs192/playlist.m3u8"],
+            ["CNR经典音乐广播", "http://liveop.cctv.cn/hls/jdyygb192/playlist.m3u8"],
+            ["北京音乐广播", "http://123.56.16.201:1935/live/fm974/96K/tzwj_video.m3u8"],
+            ["深圳飞扬971", "http://satellitepull.cnr.cn/live/wxszfy971/playlist.m3u8"]
+        ];
+
+        // --- 多语言词典 (i18n) ---
+        const i18n = {
+            'zh-CN': {
+                appTitle: 'CyberRadio 网络电台',
+                speed: '网速:',
+                total: '累计流量:',
+                noStation: '未选择电台',
+                clickToPlayTip: '点击右侧电台列表开始播放',
+                ready: '未就绪',
+                connecting: '连接中...',
+                playing: '正在播放',
+                error: '链接失败/离线',
+                stopped: '已停止',
+                volume: '音量',
+                gain: '音频增益',
+                presets: '预设喜爱电台 (10个)',
+                presetTip: '点击播放，右键/长按保存当前',
+                tabStations: '电台列表',
+                tabHistory: '播放历史',
+                searchPlaceholder: '搜索电台名称或网址...',
+                addStation: '添加电台',
+                clearHistory: '清空历史记录',
+                modalAddTitle: '添加新电台',
+                modalEditTitle: '编辑电台',
+                labelName: '电台名称',
+                labelUrl: '直播流网址 (.m3u8 / http)',
+                cancel: '取消',
+                save: '保存',
+                emptyPreset: '未设定'
+            },
+            'zh-TW': {
+                appTitle: 'CyberRadio 網路電台',
+                speed: '網速:',
+                total: '累計流量:',
+                noStation: '未選擇電台',
+                clickToPlayTip: '點擊右側電台列表開始播放',
+                ready: '未就緒',
+                connecting: '連接中...',
+                playing: '正在播放',
+                error: '鏈接失敗/離線',
+                stopped: '已停止',
+                volume: '音量',
+                gain: '聲音增益',
+                presets: '預設喜愛電台 (10個)',
+                presetTip: '單擊播放，右鍵/長按儲存當前',
+                tabStations: '電台列表',
+                tabHistory: '播放歷史',
+                searchPlaceholder: '搜尋電台名稱或網址...',
+                addStation: '新增電台',
+                clearHistory: '清空歷史紀錄',
+                modalAddTitle: '新增電台',
+                modalEditTitle: '編輯電台',
+                labelName: '電台名稱',
+                labelUrl: '直播流網址 (.m3u8 / http)',
+                cancel: '取消',
+                save: '儲存',
+                emptyPreset: '未設定'
+            },
+            'en': {
+                appTitle: 'CyberRadio Web Player',
+                speed: 'Speed:',
+                total: 'Total Data:',
+                noStation: 'No Station Selected',
+                clickToPlayTip: 'Click a station from list to play',
+                ready: 'Ready',
+                connecting: 'Connecting...',
+                playing: 'Playing',
+                error: 'Stream Error',
+                stopped: 'Stopped',
+                volume: 'Volume',
+                gain: 'Gain Boost',
+                presets: 'Favorites Presets (10)',
+                presetTip: 'Click to play, Right-Click/Hold to save current',
+                tabStations: 'Station List',
+                tabHistory: 'Play History',
+                searchPlaceholder: 'Search name or URL...',
+                addStation: 'Add Station',
+                clearHistory: 'Clear History',
+                modalAddTitle: 'Add New Station',
+                modalEditTitle: 'Edit Station',
+                labelName: 'Station Name',
+                labelUrl: 'Stream URL (.m3u8 / http)',
+                cancel: 'Cancel',
+                save: 'Save',
+                emptyPreset: 'Empty'
+            }
+        };
+
+        // --- 全局应用状态 ---
+        let currentLang = 'zh-CN';
+        let stations = [];
+        let history = [];
+        let presets = Array(10).fill(null);
+        let currentStation = null;
+
+        let hls = null;
+        const audio = document.getElementById('audio-player');
+
+        // Web Audio API 视效与增益
+        let audioCtx = null;
+        let audioSource = null;
+        let gainNode = null;
+        let analyser = null;
+        let visualizerType = 'bars';
+        let animFrameId = null;
+
+        // 流量与网速统计
+        let totalBytesLoaded = 0;
+        let bytesInLastSecond = 0;
+        let speedTimer = null;
+
+        // --- 初始化应用 ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initStorageData();
+            initAudioContext();
+            initCanvas();
+            renderUI();
+            startTrafficMonitoring();
+        });
+
+        // 初始化 LocalStorage 缓存或默认数据
+        function initStorageData() {
+            // 载入电台列表
+            const localStations = localStorage.getItem('cyber_radio_stations');
+            if (localStations) {
+                stations = JSON.parse(localStations);
+            } else {
+                stations = rawPresetStations.map((item, idx) => ({
+                    id: 'st_' + Date.now() + '_' + idx,
+                    name: item[0],
+                    url: item[1]
+                }));
+                saveStationsToStorage();
+            }
+
+            // 载入预设按键 (10个)
+            const localPresets = localStorage.getItem('cyber_radio_presets');
+            if (localPresets) {
+                presets = JSON.parse(localPresets);
+            }
+
+            // 载入播放历史
+            const localHistory = localStorage.getItem('cyber_radio_history');
+            if (localHistory) {
+                history = JSON.parse(localHistory);
+            }
+        }
+
+        function saveStationsToStorage() {
+            localStorage.setItem('cyber_radio_stations', JSON.stringify(stations));
+        }
+
+        function savePresetsToStorage() {
+            localStorage.setItem('cyber_radio_presets', JSON.stringify(presets));
+        }
+
+        function saveHistoryToStorage() {
+            localStorage.setItem('cyber_radio_history', JSON.stringify(history));
+        }
+
+        // --- 语言切换 ---
+        function changeLanguage(lang) {
+            currentLang = lang;
+            const dict = i18n[lang];
+
+            document.getElementById('app-title').innerText = dict.appTitle;
+            document.getElementById('label-speed').innerText = dict.speed;
+            document.getElementById('label-total').innerText = dict.total;
+            document.getElementById('label-volume').innerHTML = `<i class="fa-solid fa-volume-high"></i> ${dict.volume}`;
+            document.getElementById('label-gain').innerHTML = `<i class="fa-solid fa-bolt"></i> ${dict.gain}`;
+            document.getElementById('label-presets').innerText = dict.presets;
+            document.getElementById('preset-tip').innerText = dict.presetTip;
+            document.getElementById('tab-title-stations').innerText = dict.tabStations;
+            document.getElementById('tab-title-history').innerText = dict.tabHistory;
+            document.getElementById('search-input').placeholder = dict.searchPlaceholder;
+            document.getElementById('btn-add-station').innerText = dict.addStation;
+            document.getElementById('btn-clear-history').innerText = dict.clearHistory;
+
+            document.getElementById('label-station-name').innerText = dict.labelName;
+            document.getElementById('label-station-url').innerText = dict.labelUrl;
+            document.getElementById('btn-cancel').innerText = dict.cancel;
+            document.getElementById('btn-save').innerText = dict.save;
+
+            renderPresets();
+            renderStationList();
+            renderHistoryList();
+            updateStatusBadge(audio.paused ? 'stopped' : 'playing');
+        }
+
+        // --- 核心播放控制 ---
+        function playStation(station) {
+            currentStation = station;
+            document.getElementById('current-station-name').innerText = station.name;
+            document.getElementById('current-station-url').innerText = station.url;
+
+            updateStatusBadge('connecting');
+            addToHistory(station);
+
+            // Web Audio Context 激活
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            // 清除原有 HLS 实例
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+
+            // 播放 .m3u8 逻辑
+            if (station.url.includes('.m3u8')) {
+                if (Hls.isSupported()) {
+                    hls = new Hls();
+                    hls.loadSource(station.url);
+                    hls.attachMedia(audio);
+                    
+                    // 流量监听事件
+                    hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+                        if (data && data.frag) {
+                            const bytes = data.frag.stats.total || data.frag.stats.loaded || 0;
+                            totalBytesLoaded += bytes;
+                            bytesInLastSecond += bytes;
+                        }
+                    });
+
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        audio.play().catch(handlePlayError);
+                    });
+
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        if (data.fatal) {
+                            updateStatusBadge('error');
+                        }
+                    });
+                } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+                    // Safari 原生支持
+                    audio.src = station.url;
+                    audio.play().catch(handlePlayError);
+                }
+            } else {
+                // 普通音频流 (http/mp3/aac)
+                audio.src = station.url;
+                audio.play().catch(handlePlayError);
+            }
+
+            renderStationList();
+        }
+
+        function togglePlay() {
+            if (!currentStation) return;
+            if (audio.paused) {
+                audio.play().then(() => updateStatusBadge('playing')).catch(handlePlayError);
+            } else {
+                audio.pause();
+                updateStatusBadge('stopped');
+            }
+        }
+
+        function handlePlayError(err) {
+            console.warn('Playback failed:', err);
+            updateStatusBadge('error');
+        }
+
+        // 监听原生 Audio 事件控制连接状态提示
+        audio.addEventListener('loadstart', () => updateStatusBadge('connecting'));
+        audio.addEventListener('waiting', () => updateStatusBadge('connecting'));
+        audio.addEventListener('playing', () => updateStatusBadge('playing'));
+        audio.addEventListener('pause', () => updateStatusBadge('stopped'));
+        audio.addEventListener('error', () => updateStatusBadge('error'));
+
+        // 更新状态徽章样式
+        function updateStatusBadge(state) {
+            const badge = document.getElementById('status-badge');
+            const text = document.getElementById('status-text');
+            const icon = document.getElementById('play-icon');
+            const dict = i18n[currentLang];
+
+            badge.className = 'status-badge ' + state;
+
+            if (state === 'connecting') {
+                text.innerText = dict.connecting;
+                icon.className = 'fa-solid fa-spinner fa-spin';
+            } else if (state === 'playing') {
+                text.innerText = dict.playing;
+                icon.className = 'fa-solid fa-pause';
+            } else if (state === 'error') {
+                text.innerText = dict.error;
+                icon.className = 'fa-solid fa-triangle-exclamation';
+            } else {
+                text.innerText = dict.stopped;
+                icon.className = 'fa-solid fa-play';
+            }
+        }
+
+        // --- Web Audio API & 增益 & 视效 ---
+        function initAudioContext() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+
+                gainNode = audioCtx.createGain();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 128;
+
+                // 跨域音轨捕获 (注意：部分无 CORS Header 资源会被浏览器阻断 analyser，但音质不受影响)
+                audioSource = audioCtx.createMediaElementSource(audio);
+                audioSource.connect(gainNode);
+                gainNode.connect(analyser);
+                analyser.connect(audioCtx.destination);
+            } catch (e) {
+                console.warn('Web Audio API Initialization Fallback:', e);
+            }
+        }
+
+        function updateVolume(val) {
+            audio.volume = val / 100;
+            document.getElementById('volume-val').innerText = val + '%';
+        }
+
+        function updateGain(val) {
+            const gainFactor = val / 100;
+            if (gainNode) {
+                gainNode.gain.value = gainFactor;
+            }
+            document.getElementById('gain-val').innerText = gainFactor.toFixed(1) + 'x';
+        }
+
+        // --- Canvas 视效渲染 (5种可选模式) ---
+        let canvas, ctx;
+        function initCanvas() {
+            canvas = document.getElementById('visualizer');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            drawVisualizer();
+        }
+
+        function resizeCanvas() {
+            if (canvas) {
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = canvas.parentElement.clientHeight;
+            }
+        }
+
+        function setVisualizerType(type) {
+            visualizerType = type;
+        }
+
+        function drawVisualizer() {
+            animFrameId = requestAnimationFrame(drawVisualizer);
+
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+
+            if (visualizerType === 'off') return;
+
+            const bufferLength = analyser ? analyser.frequencyBinCount : 32;
+            const dataArray = new Uint8Array(bufferLength);
+
+            if (analyser && !audio.paused) {
+                if (visualizerType === 'wave') {
+                    analyser.getByteTimeDomainData(dataArray);
+                } else {
+                    analyser.getByteFrequencyData(dataArray);
+                }
+            } else {
+                // 未播放/跨域限制时呈现平缓伪动效
+                for (let i = 0; i < bufferLength; i++) dataArray[i] = 10;
+            }
+
+            // 1. 频域柱状图
+            if (visualizerType === 'bars') {
+                const barWidth = (width / bufferLength) * 2.2;
+                let x = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    const barHeight = (dataArray[i] / 255) * height * 0.8;
+                    const gradient = ctx.createLinearGradient(0, height, 0, 0);
+                    gradient.addColorStop(0, '#0072ff');
+                    gradient.addColorStop(1, '#00f2fe');
+
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
+                    x += barWidth;
+                }
+            } 
+            // 2. 时域波形图
+            else if (visualizerType === 'wave') {
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#00f2fe';
+                ctx.beginPath();
+
+                const sliceWidth = width / bufferLength;
+                let x = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = (v * height) / 2;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                    x += sliceWidth;
+                }
+                ctx.lineTo(width, height / 2);
+                ctx.stroke();
+            } 
+            // 3. 环形律动
+            else if (visualizerType === 'circle') {
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = Math.min(width, height) / 4;
+
+                ctx.strokeStyle = '#00c6ff';
+                ctx.lineWidth = 2;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const angle = (i / bufferLength) * Math.PI * 2;
+                    const amplitude = (dataArray[i] / 255) * 40;
+                    const x1 = centerX + Math.cos(angle) * radius;
+                    const y1 = centerY + Math.sin(angle) * radius;
+                    const x2 = centerX + Math.cos(angle) * (radius + amplitude);
+                    const y2 = centerY + Math.sin(angle) * (radius + amplitude);
+
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
+            } 
+            // 4. 霓虹粒子
+            else if (visualizerType === 'particles') {
+                for (let i = 0; i < bufferLength; i += 2) {
+                    const radius = (dataArray[i] / 255) * 20;
+                    const x = (i / bufferLength) * width + Math.sin(Date.now() * 0.002 + i) * 20;
+                    const y = height / 2 + Math.cos(Date.now() * 0.003 + i) * (height / 3);
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0, 242, 254, ${dataArray[i] / 255})`;
+                    ctx.fill();
+                }
+            }
+        }
+
+        // --- 实时网速与流量统计 ---
+        function startTrafficMonitoring() {
+            speedTimer = setInterval(() => {
+                // 计算实时网速
+                const speedKbps = (bytesInLastSecond / 1024).toFixed(1);
+                document.getElementById('network-speed').innerText = speedKbps > 1024 
+                    ? (speedKbps / 1024).toFixed(2) + ' MB/s' 
+                    : speedKbps + ' KB/s';
+
+                // 累计流量
+                const totalMb = (totalBytesLoaded / (1024 * 1024)).toFixed(1);
+                document.getElementById('network-total').innerText = totalMb + ' MB';
+
+                bytesInLastSecond = 0;
+            }, 1000);
+        }
+
+        // --- 10个喜爱按键功能 (Presets) ---
+        function renderPresets() {
+            const grid = document.getElementById('presets-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < 10; i++) {
+                const btn = document.createElement('div');
+                btn.className = 'preset-btn';
+                const presetStation = presets[i];
+
+                btn.innerHTML = `
+                    <span class="num">P${i + 1}</span>
+                    <span class="name">${presetStation ? presetStation.name : i18n[currentLang].emptyPreset}</span>
+                `;
+
+                // 单击播放
+                btn.onclick = () => {
+                    if (presets[i]) playStation(presets[i]);
+                };
+
+                // 右键/长按绑定当前播放电台
+                btn.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    bindPreset(i);
+                };
+
+                grid.appendChild(btn);
+            }
+        }
+
+        function bindPreset(index) {
+            if (!currentStation) return;
+            presets[index] = { ...currentStation };
+            savePresetsToStorage();
+            renderPresets();
+        }
+
+        // --- 侧边栏与列表功能 ---
+        function renderUI() {
+            renderPresets();
+            renderStationList();
+            renderHistoryList();
+        }
+
+        function renderStationList(filterText = '') {
+            const container = document.getElementById('station-list');
+            container.innerHTML = '';
+
+            const list = stations.filter(s => 
+                s.name.toLowerCase().includes(filterText.toLowerCase()) || 
+                s.url.toLowerCase().includes(filterText.toLowerCase())
+            );
+
+            list.forEach((station) => {
+                const item = document.createElement('div');
+                const isActive = currentStation && currentStation.id === station.id;
+                item.className = 'station-item' + (isActive ? ' active' : '');
+
+                item.innerHTML = `
+                    <div class="item-title" onclick="playStationById('${station.id}')">
+                        <i class="fa-solid fa-radio" style="margin-right:8px; opacity:0.7;"></i>${station.name}
+                    </div>
+                    <div class="station-item-actions">
+                        <button class="action-icon-btn" onclick="openEditModal('${station.id}', event)"><i class="fa-solid fa-pen"></i></button>
+                        <button class="action-icon-btn" onclick="deleteStation('${station.id}', event)"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+
+                container.appendChild(item);
+            });
+        }
+
+        function playStationById(id) {
+            const st = stations.find(s => s.id === id);
+            if (st) playStation(st);
+        }
+
+        function filterStations(val) {
+            renderStationList(val);
+        }
+
+        // 编辑/添加电台逻辑
+        function openAddModal() {
+            document.getElementById('modal-title').innerText = i18n[currentLang].modalAddTitle;
+            document.getElementById('modal-edit-id').value = '';
+            document.getElementById('modal-input-name').value = '';
+            document.getElementById('modal-input-url').value = '';
+            document.getElementById('station-modal').classList.add('open');
+        }
+
+        function openEditModal(id, e) {
+            e.stopPropagation();
+            const st = stations.find(s => s.id === id);
+            if (!st) return;
+
+            document.getElementById('modal-title').innerText = i18n[currentLang].modalEditTitle;
+            document.getElementById('modal-edit-id').value = st.id;
+            document.getElementById('modal-input-name').value = st.name;
+            document.getElementById('modal-input-url').value = st.url;
+            document.getElementById('station-modal').classList.add('open');
+        }
+
+        function closeModal() {
+            document.getElementById('station-modal').classList.remove('open');
+        }
+
+        function saveStationForm() {
+            const id = document.getElementById('modal-edit-id').value;
+            const name = document.getElementById('modal-input-name').value.trim();
+            const url = document.getElementById('modal-input-url').value.trim();
+
+            if (!name || !url) return;
+
+            if (id) {
+                // 编辑修改
+                const index = stations.findIndex(s => s.id === id);
+                if (index !== -1) {
+                    stations[index].name = name;
+                    stations[index].url = url;
+                }
+            } else {
+                // 新增电台
+                const newStation = { id: 'st_' + Date.now(), name, url };
+                stations.unshift(newStation);
+            }
+
+            saveStationsToStorage();
+            renderStationList();
+            closeModal();
+        }
+
+        function deleteStation(id, e) {
+            e.stopPropagation();
+            stations = stations.filter(s => s.id !== id);
+            saveStationsToStorage();
+            renderStationList();
+        }
+
+        function resetDefaultStations() {
+            if (confirm('确定要恢复默认预置电台列表吗？')) {
+                stations = rawPresetStations.map((item, idx) => ({
+                    id: 'st_' + Date.now() + '_' + idx,
+                    name: item[0],
+                    url: item[1]
+                }));
+                saveStationsToStorage();
+                renderStationList();
+            }
+        }
+
+        // --- 播放历史记录 ---
+        function addToHistory(station) {
+            history = history.filter(h => h.url !== station.url);
+            history.unshift({
+                name: station.name,
+                url: station.url,
+                time: new Date().toLocaleTimeString()
+            });
+            if (history.length > 30) history.pop();
+            saveHistoryToStorage();
+            renderHistoryList();
+        }
+
+        function renderHistoryList() {
+            const container = document.getElementById('history-list');
+            container.innerHTML = '';
+
+            history.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'station-item';
+                div.onclick = () => playStation(item);
+
+                div.innerHTML = `
+                    <div>
+                        <div class="item-title">${item.name}</div>
+                        <div class="history-time">${item.time}</div>
+                    </div>
+                    <i class="fa-solid fa-play" style="opacity:0.5; font-size:0.8rem;"></i>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function clearHistory() {
+            history = [];
+            saveHistoryToStorage();
+            renderHistoryList();
+        }
+
+        // 标签页切换 (电台列表 / 播放历史)
+        function switchTab(tab) {
+            document.getElementById('tab-btn-stations').classList.toggle('active', tab === 'stations');
+            document.getElementById('tab-btn-history').classList.toggle('active', tab === 'history');
+            document.getElementById('panel-stations').style.display = tab === 'stations' ? 'flex' : 'none';
+            document.getElementById('panel-history').style.display = tab === 'history' ? 'flex' : 'none';
+        }
+    </script>
+</body>
+</html>
